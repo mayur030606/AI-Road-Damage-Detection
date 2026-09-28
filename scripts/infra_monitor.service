@@ -1,0 +1,33 @@
+[Unit]
+Description=SIH26124 Edge Infrastructure Road & Traffic Intelligence Monitor
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/SIH
+Environment=PYTHONUNBUFFERED=1
+Environment=SIH_BACKEND_URL=http://192.168.1.100:8000/api/v1/incidents
+Environment=SIH_AUTH_TOKEN=sih_admin
+Environment=SIH_DEVICE_ID=EDGE-RPI4-001
+
+# Execute edge pipeline using the isolated virtual environment
+ExecStart=/home/pi/SIH/env/bin/python ai/detector.py --source 0 --conf 0.75 --backend-url http://192.168.1.100:8000/api/v1/incidents --token sih_admin
+
+# Robust crash recovery: auto-restart every 5 seconds on unexpected exit
+Restart=always
+RestartSec=5s
+
+# Resource governance & capabilities for CSI camera access
+LimitNOFILE=65536
+CapabilityBoundingSet=CAP_SYS_RAWIO CAP_DAC_OVERRIDE
+
+# Standard logging redirected to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=infra_monitor
+
+[Install]
+WantedBy=multi-user.target

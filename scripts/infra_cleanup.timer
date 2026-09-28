@@ -1,0 +1,9 @@
+[Unit]
+Description=24-Hour Local Storage Cleanup Timer for SIH26124 Edge Captures
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

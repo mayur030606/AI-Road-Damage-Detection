@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Maven / Java Build Outputs
+target/
+*.class
+*.jar
+*.war
+
+# Secrets and environment variables
+.env
+*.key
+*.pem
+
+# Machine Learning Models, Runs, & Outputs
+runs/
+*.pt
+*.onnx
+*.engine
+*.cache
+ai_output/
+
+# Datasets
+datasets/
+
+# Node / Web Frontend
+node_modules/
+dist/
+
+# Legacy / Archive
+_archive/
+
+# Generated runtime data
+scripts/demo_offline_queue.db
+scripts/received_incidents.jsonl
+ai/queue/incidents_queue.db
+ai/video_captures/
+ai/samples/real_pothole_720p.mp4
+
+# Demo / training media assets
+tfliterpipothole/pothole1/
+tfliterpipothole/potholeimages/
+
+# IDE / System files
+.idea/
+.vscode/
+*.log
+Thumbs.db
+.DS_Store
+*.tmp

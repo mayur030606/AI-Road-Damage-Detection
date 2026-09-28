@@ -1,0 +1,10 @@
+[Unit]
+Description=SIH26124 Edge Local Storage Cleanup Service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/SIH
+ExecStart=/bin/bash /home/pi/SIH/scripts/cleanup_storage.sh

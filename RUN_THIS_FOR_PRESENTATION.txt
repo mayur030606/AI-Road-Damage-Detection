@@ -1,0 +1,329 @@
+================================================================================
+  SIH26124 — THE ONLY FILE YOU NEED FOR TOMORROW'S PRESENTATION
+  Live camera = Raspberry Pi CSI (imx219). Laptop webcam is never used.
+================================================================================
+
+WHAT EACH MACHINE DOES
+  Laptop   Dashboard only. Shows recorded road video, then Pi live feed.
+           Command: mock_backend.py   Browser: http://127.0.0.1:8000
+  Pi       CSI camera + pothole AI. Sends incidents to the laptop.
+           Command: python -m ai.cli live ...
+
+YOUR NETWORK (change only if ping fails tomorrow)
+  Pi        shivraj / raspberry / 10.54.12.49
+  Laptop    10.54.12.227
+  Check Pi:     hostname -I
+  Check laptop: ipconfig   (IPv4 Address)
+
+
+================================================================================
+STEP 1 — HARDWARE (before powering the Pi)
+================================================================================
+1. Unplug Pi power.
+2. Reseat the camera ribbon on BOTH ends (this timeout is often a loose cable):
+     Pi CAMERA port: silver contacts toward HDMI, blue backing toward USB.
+     Camera board:   silver contacts toward the lens.
+     Latch fully down on both ends.
+3. Plug Pi power back in. Wait 45 seconds.
+
+
+================================================================================
+STEP 2 — LAPTOP (PowerShell). Keep this window open the whole demo.
+================================================================================
+cd C:\Users\shiv_n0t_f0und\Desktop\SIH
+
+python scripts/mock_backend.py --port 8000 --conf 0.50 --pi-stream-url http://10.54.12.49:5001/video_feed
+
+Then in Chrome/Edge:
+
+  http://127.0.0.1:8000
+
+You should see the FOLDER video (pothole1.mp4) with red POTHOLE boxes.
+Leave this running.
+
+Do NOT run "python -m ai.cli live" on Windows. That is blocked so the laptop
+camera cannot open.
+
+
+================================================================================
+STEP 3 — SSH TO THE PI (second PowerShell window)
+================================================================================
+ssh shivraj@10.54.12.49
+  password: <YOUR_PI_PASSWORD>
+
+
+================================================================================
+STEP 4 — PROVE THE CSI CAMERA WORKS (Pi)
+================================================================================
+rpicam-hello --list-cameras
+
+Must show:  0 : imx219
+
+Then take a 3 second test (NOT 1280x720 — that mode times out on this sensor):
+
+  rpicam-hello -t 3000 --width 1920 --height 1080
+
+If this errors "frontend has timed out" or "No cameras available":
+  Open CASE A / CASE B in the ERROR PLAYBOOK below.
+  Do not start python -m ai.cli live until list-cameras shows imx219.
+
+  Over SSH always add --nopreview so Lite OS does not fail on egl/drm:
+
+    rpicam-hello -t 3000 --width 1920 --height 1080 --nopreview
+
+
+================================================================================
+STEP 5 — START LIVE DETECTION ON THE PI (Pi)
+================================================================================
+cd ~/projects/my_app
+source venv/bin/activate
+which python
+  Must be: /home/shivraj/projects/my_app/venv/bin/python
+
+sudo killall rpicam-hello rpicam-vid libcamera-vid 2>/dev/null || true
+
+python -m ai.cli live --source 0 --conf 0.50 --stream-port 5001 --backend-url http://10.54.12.227:8000/api/v1/incidents --token sih_admin
+
+Good logs look like:
+  Trying CSI mode 1920x1080 BGR888
+  Picamera2 CSI active
+  Pi camera preview: http://0.0.0.0:5001/video_feed
+  Starting Edge Perception Loop
+
+Leave this running. Do not Ctrl+C until the demo is over.
+
+If you see "Camera frontend has timed out" again, go back to Step 1 (cable)
+and Step 4 (rpicam-hello). The software now uses native 1920x1080, not 1280x720.
+
+
+================================================================================
+STEP 6 — SWITCH THE DASHBOARD TO THE PI CAMERA (laptop browser)
+================================================================================
+On http://127.0.0.1:8000 click:
+
+  [ Demo video ]       recorded file from tfliterpipothole/pothole1/pothole1.mp4
+  [ Live Pi camera ]   live CSI camera on the Raspberry Pi
+
+Point the Pi camera at a pothole, a printed road photo, or a dark patch on the
+floor. Red boxes + incident rows should appear.
+
+
+================================================================================
+WHAT TO SAY (about 90 seconds)
+================================================================================
+1. Laptop is the municipal dashboard. The sensing unit is the Raspberry Pi.
+2. Demo video = offline road footage, same pothole model.
+3. Click Live Pi camera = CSI module on the vehicle, not a laptop webcam.
+4. Detections POST to /api/v1/incidents with GPS and a 10-second clip
+   (5 seconds before + 5 seconds after).
+
+
+================================================================================
+ERROR PLAYBOOK — use the CASE that matches the screen
+================================================================================
+
+CASE A — ping 10.54.12.49 works, ssh works, but:
+           "No cameras available!"
+           "ERROR: *** no cameras available ***"
+           "Failed to create egl preview"  (ignore this line on Lite OS / SSH)
+
+  The "egl/drm preview" lines are NORMAL over SSH (no desktop). Ignore them.
+  The real failure is "no cameras available" — libcamera cannot see IMX219.
+
+  On the Pi, paste these one at a time:
+
+    sudo killall rpicam-hello rpicam-vid libcamera-hello libcamera-vid 2>/dev/null || true
+    ls -l /dev/video* /dev/media* 2>/dev/null
+    dmesg | grep -iE 'imx|unicam|ov5647|camera' | tail -n 30
+
+    sudo raspi-config
+      Interface Options → I5 I2C → Enable → Finish
+      (there is NO Camera menu on Trixie — that is OK)
+
+    sudo apt install -y i2c-tools
+    ls /dev/i2c-*
+    sudo i2cdetect -y 10
+    sudo i2cdetect -y 0
+    sudo i2cdetect -y 1
+
+  If you see "10" in the grid (address 0x10), the sensor is electrically alive.
+  If every bus is empty (only "--"), the Pi still does not see the module:
+    power OFF, flip the ribbon 180° test is WRONG — do not flip randomly.
+    Confirm BLUE backing on Pi points to USB/Ethernet, silver to HDMI.
+    Try the OTHER CSI port on Pi 5 (CAM/DISP 0 vs 1).
+    Try a different ribbon if you have one.
+
+  Force the overlay ONLY if dmesg has NO imx219 lines at all.
+  If dmesg already shows "failed to read chip id 219", skip nano and go to CASE A2.
+
+    sudo nano /boot/firmware/config.txt
+
+  Prefer ONLY this (comment out extra dtoverlay=imx219 if both exist):
+
+    camera_auto_detect=1
+    dtparam=i2c_arm=on
+    # dtoverlay=imx219
+
+  Save: Ctrl+O, Enter, Ctrl+X
+  Then full POWER OFF (unplug), not only reboot. Wait 15s. Plug in.
+
+
+CASE A2 — dmesg shows:
+           imx219 10-0010: Error reading reg 0x0000: -121
+           failed to read chip id 219
+           probe with driver imx219 failed with error -121
+
+  THIS IS NOT FIXABLE IN PYTHON. The kernel overlay is already loaded.
+  The Pi cannot talk to the sensor over the ribbon I2C (EREMOTEIO).
+  Software, venv, YOLO, dashboard, and config.txt cannot read chip id 219.
+
+  Do this once, in this order:
+
+  1. sudo shutdown -h now
+     Wait until the green LED stops. UNPLUG USB-C. Wait 20 seconds.
+
+  2. On the Pi board CAMERA connector:
+       Pull the black/plastic latch UP (both sides).
+       Slide the ribbon fully OUT, then fully IN.
+       Silver contacts face the HDMI / board edge (Pi 4).
+       Blue plastic faces USB/Ethernet.
+       Push latch DOWN until flush. Tug test: cable must not slide.
+
+  3. On the CAMERA MODULE board:
+       Same: latch up, cable out, in, latch down.
+       Silver contacts face the LENS / front of the module.
+
+  4. Use the official 5V 3A USB-C PSU (weak phone chargers drop camera 3.3V).
+
+  5. Plug power in. Wait 60 seconds. SSH. Then:
+
+       dmesg | grep imx219
+       rpicam-hello --list-cameras
+
+  SUCCESS looks like:
+       0 : imx219 ...
+  FAIL still looks like:
+       failed to read chip id 219 / error -121
+
+  If it still fails: the ribbon or the camera PCB is damaged (it worked earlier,
+  then timed out, then this). Swap the FFC cable or the Camera Module v2.
+  There is no more software step.
+
+  PRESENTATION WITHOUT CSI (works today):
+    Laptop: python scripts/mock_backend.py --port 8000 --conf 0.50
+    Browser: http://127.0.0.1:8000
+    Leave [ Demo video ] selected.
+    That is the same pothole model on pothole1.mp4.
+
+
+CASE B — "Camera frontend has timed out" / Dequeue timer expired
+
+  Sensor was listed, then stream died. Causes: loose latch, 1280x720 (not native),
+  or another process holding the camera.
+
+    sudo killall -9 rpicam-hello rpicam-vid libcamera-vid python 2>/dev/null || true
+    rpicam-hello -t 3000 --width 1920 --height 1080 --nopreview
+
+  Never use --width 1280 --height 720 on this IMX219.
+  If timeout continues: power OFF, reseat both ends, power ON, CASE A.
+
+
+CASE C — ssh: Connection reset / kex_exchange_identification
+
+  Pi is booting or SSH restarted. Wait 60s after power-on. Then:
+
+    ping 10.54.12.49
+    ssh shivraj@10.54.12.49
+
+  Do not spam ssh during boot. Do not run "sudo shutdown" from Windows.
+
+
+CASE D — Input/output error on logout / random I/O errors
+
+  SD card glitch. Power OFF 15s, power ON. If it keeps happening, reflash
+  Raspberry Pi OS Lite 64-bit. Demo can still use folder video on the laptop.
+
+
+CASE E — ping fails (100% loss)
+
+  Pi has no network. Same Wi-Fi as laptop? Power cycle Pi. Check:
+    On Pi with monitor: hostname -I
+  Update IP in ssh and --backend-url / --pi-stream-url if it changed.
+
+
+CASE F — "No module named ai"
+
+    cd ~/projects/my_app
+    source venv/bin/activate
+    which python
+  Must print: /home/shivraj/projects/my_app/venv/bin/python
+
+
+CASE G — Dashboard "Pi camera offline"
+
+  Step 5 live command is not running, or IP is wrong.
+  Laptop: ping 10.54.12.49
+  Pi live log must show: Pi camera preview: http://0.0.0.0:5001/video_feed
+
+
+CASE H — Camera busy / Device or resource busy
+
+    sudo killall rpicam-hello rpicam-vid libcamera-vid
+  Only ONE program may use CSI.
+
+
+CASE I — Live on Windows / laptop webcam
+
+  Do not run ai.cli live on Windows. Laptop is dashboard only.
+
+
+CASE J — Presentation in 5 minutes and CSI still dead
+
+  Demo still works without the Pi camera:
+    Laptop mock_backend.py
+    Browser http://127.0.0.1:8000
+    Keep [ Demo video ] selected
+  Say: "Edge inference is on the Pi; this clip is the same model on recorded
+  road footage. Live CSI is the same pipeline when the module enumerates."
+
+
+================================================================================
+IF SOMETHING BREAKS (short)
+================================================================================
+"No module named ai"     → CASE F
+Live Pi camera offline   → CASE G
+Camera busy              → CASE H
+No cameras available     → CASE A, then CASE A2 if dmesg has chip id 219 / -121
+Frontend timed out       → CASE B
+SSH connection reset     → CASE C
+I/O error                → CASE D
+Ping fails               → CASE E
+No pothole boxes         → more light, closer, --conf 0.40
+ultralytics pip errors   → ignore; Pi uses OpenCV + pothole_model.onnx
+
+
+================================================================================
+SHUT DOWN (Pi only, from SSH — never from Windows)
+================================================================================
+Pi:      Ctrl+C   then   sudo shutdown -h now    wait 10s    unplug
+Laptop:  Ctrl+C in mock_backend window
+Do NOT type sudo shutdown in Windows PowerShell.
+
+
+================================================================================
+CHEAT SHEET
+================================================================================
+LAPTOP:
+  cd C:\Users\shiv_n0t_f0und\Desktop\SIH
+  python scripts/mock_backend.py --port 8000 --conf 0.50
+  http://127.0.0.1:8000
+
+PI:
+  ssh shivraj@10.54.12.49
+  rpicam-hello --list-cameras
+  rpicam-hello -t 3000 --width 1920 --height 1080 --nopreview
+  cd ~/projects/my_app && source venv/bin/activate
+  python -m ai.cli live --source 0 --conf 0.50 --stream-port 5001 --backend-url http://10.54.12.227:8000/api/v1/incidents --token sih_admin
+
+DASHBOARD:  Demo video  |  Live Pi camera
+================================================================================

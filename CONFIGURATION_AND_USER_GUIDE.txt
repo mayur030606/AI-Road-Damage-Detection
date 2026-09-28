@@ -1,0 +1,108 @@
+================================================================================
+SIH26124: FLEETVISION - MOBILE URBAN INTELLIGENCE & TRAFFIC SENSING PLATFORM
+================================================================================
+SYSTEM ARCHITECTURE, EDGE CONFIGURATION, AND 3-TIER OPERATIONAL USER MANUAL
+Target Edge Hardware: Raspberry Pi 4 / 5 (64-bit Raspberry Pi OS Bookworm)
+Perception Engine:    Ultralytics YOLO (pothole_model.pt @ 0.75 Conf, yolov8n.pt)
+Streaming Standard:   1280x720 High-Definition @ 30 FPS with Hardware AEC & AWB
+Incident Capture:     10-Second HD .mp4 (5s Pre-event + 5s Post-event Ring Buffer)
+Central Ingestion:    http://192.168.1.100:8000/api/v1/incidents (Bearer: sih_admin)
+Static Host Network:  IP 192.168.1.150 | User: pi | Password: <YOUR_PI_PASSWORD>
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. SECTION 1: DEVELOPER & EDGE SYSTEMS ARCHITECT GUIDE
+   1.1 Hardware Specifications & Physical Wiring
+   1.2 Network & Static IP Setup (192.168.1.150)
+   1.3 Operating System & Environment Configuration (Bookworm 64-bit)
+   1.4 Camera Module Setup (CSI Port, Libcamera, Picamera2, AEC/AWB)
+   1.5 Capturing Real Road Pothole Videos & Prototype Demonstration
+
+2. SECTION 2: MUNICIPAL URBAN DATA ARCHITECT GUIDE
+   2.1 Spatial-Temporal Edge Deduplication Algorithm
+   2.2 SQLite Offline Storage Schema & Auto-Flush Mechanism
+   2.3 Event Envelope Payload JSON Specification
+   2.4 Central Ingestion Server REST API Specifications
+
+3. SECTION 3: MUNICIPAL CITY OPERATOR GUIDE
+   3.1 Navigating the React + Leaflet Command Dashboard
+   3.2 Filtering Incidents & Viewing Multi-Bus Corroboration
+   3.3 Managing Work Order Status & Dispatching Repair Teams
+
+================================================================================
+1. SECTION 1: DEVELOPER & EDGE SYSTEMS ARCHITECT GUIDE
+================================================================================
+
+1.1 HARDWARE SPECIFICATIONS & PHYSICAL WIRING
+------------------------------------------------------------------
+Required Bill of Materials (BOM):
+  - Microcontroller: Raspberry Pi 4 Model B (4GB/8GB) or Raspberry Pi 5.
+  - Camera Module: Raspberry Pi Camera Module 2 (8MP IMX219) or Camera Module 3 (12MP IMX708 with Autofocus).
+  - Storage: 32GB High-Endurance SanDisk High Endurance MicroSDHC (Class 10 U3 V30).
+  - Power Supply: Official Raspberry Pi 15W USB-C Power Supply (5.1V / 3.0A).
+  - GPS Module: NEO-6M / NEO-M8N GPS Module via USB-to-UART bridge (ttyUSB0 @ 9600 baud).
+
+Wiring & Connection Assembly:
+  1. Insert the 15-pin FPC ribbon cable into the Raspberry Pi CSI Camera port.
+     Ensure the blue stiffener faces the Ethernet/USB ports on Pi 4.
+  2. Connect the NEO-6M GPS Module via USB port.
+  3. Mount camera securely on vehicle dashboard facing ahead with horizontal road horizon view.
+
+1.2 NETWORK & STATIC IP SETUP (192.168.1.150)
+------------------------------------------------------------------
+To configure reliable edge communication, set a static IP on the Pi:
+  IP Address:       192.168.1.150
+  Subnet Mask:      255.255.255.0 (/24)
+  Default Gateway:  192.168.1.1
+  DNS Servers:      8.8.8.8, 1.1.1.1
+  SSH Credentials:  User: `pi`  |  Password: `<YOUR_PI_PASSWORD>`
+
+To apply this static IP permanently on Raspberry Pi OS Bookworm (NetworkManager):
+  sudo nmcli con mod "Wired connection 1" ipv4.addresses 192.168.1.150/24
+  sudo nmcli con mod "Wired connection 1" ipv4.gateway 192.168.1.1
+  sudo nmcli con mod "Wired connection 1" ipv4.dns "8.8.8.8 1.1.1.1"
+  sudo nmcli con mod "Wired connection 1" ipv4.method manual
+  sudo nmcli con up "Wired connection 1"
+
+Test SSH from your developer workstation:
+  ssh pi@192.168.1.150
+  (Enter password when prompted)
+
+1.3 OPERATING SYSTEM & ENVIRONMENT CONFIGURATION (BOOKWORM 64-BIT)
+------------------------------------------------------------------
+Raspberry Pi OS (Bookworm 64-bit) enforces PEP 668 managed Python environments.
+Run the following commands on the Raspberry Pi:
+
+  # Update System Packages
+  sudo apt update && sudo apt upgrade -y
+
+  # Install System Dependencies
+  sudo apt install -y python3-pip python3-venv python3-opencv libcamera-dev ffmpeg git
+
+  # Clone Repository
+  git clone https://github.com/YOUR_USERNAME/SIH.git
+  cd SIH
+
+  # Create and Activate Isolated Python Virtual Environment
+  python3 -m venv venv
+  source venv/bin/activate
+
+  # Install Required Python Libraries
+  pip install --upgrade pip
+  pip install -r requirements-pi.txt
+
+1.4 CAMERA MODULE SETUP (LIBCAMERA & PICAMERA2)
+------------------------------------------------------------------
+Verify hardware camera detection:
+  libcamera-hello --list-cameras
+
+If detected correctly, libcamera outputs camera specs (e.g. IMX219 / IMX708).
+
+Test 5-second video recording:
+  libcamera-vid -t 5000 -o test_video.mp4 --width 1280 --height 720 --framerate 30
+
+1.5 CAPTURING REAL ROAD POTHOLE VIDEOS & PROTOTYPE DEMONSTRATION
+------------------------------------------------------------------
+To run the automated perception engine on a sample video feed:
+  python -m ai.cli --source sample_video.mp4 --output-dir ai_output
