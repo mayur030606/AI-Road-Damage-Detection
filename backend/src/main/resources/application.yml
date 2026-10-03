@@ -1,5 +1,5 @@
 server:
-  port: 8080
+   port: ${PORT:8080}
 
 spring:
   application:
@@ -10,7 +10,7 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
   jpa:
-    database-platform: org.hibernate.spatial.dialect.postgis.PostgisDialect
+    
     hibernate:
       ddl-auto: update
     show-sql: false
